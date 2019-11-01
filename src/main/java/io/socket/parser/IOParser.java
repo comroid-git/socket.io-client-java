@@ -1,14 +1,14 @@
 package io.socket.parser;
 
-import io.socket.hasbinary.HasBinary;
-import org.json.JSONException;
-import org.json.JSONTokener;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.socket.hasbinary.HasBinary;
 
 final public class IOParser implements Parser {
 
@@ -122,6 +122,8 @@ final public class IOParser implements Parser {
             }
         }
 
+        private static final ObjectMapper objectMapper = new ObjectMapper();
+
         private static Packet decodeString(String str) {
             int i = 0;
             int length = str.length();
@@ -178,8 +180,8 @@ final public class IOParser implements Parser {
             if (length > i + 1){
                 try {
                     str.charAt(++i);
-                    p.data = new JSONTokener(str.substring(i)).nextValue();
-                } catch (JSONException e) {
+                    p.data = objectMapper.readTree(str.substring(i));
+                } catch (JsonProcessingException e) {
                     logger.log(Level.WARNING, "An error occured while retrieving data from JSONTokener", e);
                     return error();
                 }

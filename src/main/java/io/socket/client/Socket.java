@@ -1,13 +1,5 @@
 package io.socket.client;
 
-import io.socket.emitter.Emitter;
-import io.socket.parser.Packet;
-import io.socket.parser.Parser;
-import io.socket.thread.EventThread;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -17,6 +9,15 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import io.socket.emitter.Emitter;
+import io.socket.parser.Packet;
+import io.socket.parser.Parser;
+import io.socket.thread.EventThread;
+
+import static de.comroid.util.json.JsonSupport.arrayNode;
+import static de.comroid.util.json.JsonSupport.nodeOf;
 
 /**
  * The socket class for Socket.IO Client.
@@ -93,7 +94,7 @@ public class Socket extends Emitter {
     private Map<Integer, Ack> acks = new HashMap<Integer, Ack>();
     private Queue<On.Handle> subs;
     private final Queue<List<Object>> receiveBuffer = new LinkedList<List<Object>>();
-    private final Queue<Packet<JSONArray>> sendBuffer = new LinkedList<Packet<JSONArray>>();
+    private final Queue<Packet<ArrayNode>> sendBuffer = new LinkedList<Packet<ArrayNode>>();
 
     public Socket(Manager io, String nsp, Manager.Options opts) {
         this.io = io;
@@ -220,16 +221,16 @@ public class Socket extends Emitter {
         EventThread.exec(new Runnable() {
             @Override
             public void run() {
-                JSONArray jsonArgs = new JSONArray();
-                jsonArgs.put(event);
+                ArrayNode jsonArgs = arrayNode();
+                jsonArgs.add(event);
 
                 if (args != null) {
                     for (Object arg : args) {
-                        jsonArgs.put(arg);
+                        jsonArgs.add(nodeOf(arg));
                     }
                 }
 
-                Packet<JSONArray> packet = new Packet<JSONArray>(Parser.EVENT, jsonArgs);
+                Packet<ArrayNode> packet = new Packet<>(Parser.EVENT, jsonArgs);
 
                 if (ack != null) {
                     logger.fine(String.format("emitting packet with ack id %d", ids));
@@ -285,28 +286,28 @@ public class Socket extends Emitter {
 
             case Parser.EVENT: {
                 @SuppressWarnings("unchecked")
-                Packet<JSONArray> p = (Packet<JSONArray>) packet;
+                Packet<ArrayNode> p = (Packet<ArrayNode>) packet;
                 this.onevent(p);
                 break;
             }
 
             case Parser.BINARY_EVENT: {
                 @SuppressWarnings("unchecked")
-                Packet<JSONArray> p = (Packet<JSONArray>) packet;
+                Packet<ArrayNode> p = (Packet<ArrayNode>) packet;
                 this.onevent(p);
                 break;
             }
 
             case Parser.ACK: {
                 @SuppressWarnings("unchecked")
-                Packet<JSONArray> p = (Packet<JSONArray>) packet;
+                Packet<ArrayNode> p = (Packet<ArrayNode>) packet;
                 this.onack(p);
                 break;
             }
 
             case Parser.BINARY_ACK: {
                 @SuppressWarnings("unchecked")
-                Packet<JSONArray> p = (Packet<JSONArray>) packet;
+                Packet<ArrayNode> p = (Packet<ArrayNode>) packet;
                 this.onack(p);
                 break;
             }
@@ -321,7 +322,7 @@ public class Socket extends Emitter {
         }
     }
 
-    private void onevent(Packet<JSONArray> packet) {
+    private void onevent(Packet<ArrayNode> packet) {
         List<Object> args = new ArrayList<Object>(Arrays.asList(toArray(packet.data)));
         if (logger.isLoggable(Level.FINE)) {
             logger.fine(String.format("emitting event %s", args));
@@ -356,12 +357,12 @@ public class Socket extends Emitter {
                             logger.fine(String.format("sending ack %s", args.length != 0 ? args : null));
                         }
 
-                        JSONArray jsonArgs = new JSONArray();
+                        ArrayNode jsonArgs = arrayNode();
                         for (Object arg : args) {
-                            jsonArgs.put(arg);
+                            jsonArgs.add(nodeOf(arg));
                         }
 
-                        Packet<JSONArray> packet = new Packet<JSONArray>(Parser.ACK, jsonArgs);
+                        Packet<ArrayNode> packet = new Packet<ArrayNode>(Parser.ACK, jsonArgs);
                         packet.id = id;
                         self.packet(packet);
                     }
@@ -370,7 +371,7 @@ public class Socket extends Emitter {
         };
     }
 
-    private void onack(Packet<JSONArray> packet) {
+    private void onack(Packet<ArrayNode> packet) {
         Ack fn = this.acks.remove(packet.id);
         if (fn != null) {
             if (logger.isLoggable(Level.FINE)) {
@@ -398,7 +399,7 @@ public class Socket extends Emitter {
         }
         this.receiveBuffer.clear();
 
-        Packet<JSONArray> packet;
+        Packet<ArrayNode> packet;
         while ((packet = this.sendBuffer.poll()) != null) {
             this.packet(packet);
         }
@@ -479,18 +480,13 @@ public class Socket extends Emitter {
         return this.id;
     }
 
-    private static Object[] toArray(JSONArray array) {
-        int length = array.length();
+    private static Object[] toArray(ArrayNode array) {
+        int length = array.size();
         Object[] data = new Object[length];
         for (int i = 0; i < length; i++) {
             Object v;
-            try {
-                v = array.get(i);
-            } catch (JSONException e) {
-                logger.log(Level.WARNING, "An error occured while retrieving data from JSONArray", e);
-                v = null;
-            }
-            data[i] = JSONObject.NULL.equals(v) ? null : v;
+            v = array.get(i);
+            data[i] = nodeOf(null).equals(v) ? null : v;
         }
         return data;
     }

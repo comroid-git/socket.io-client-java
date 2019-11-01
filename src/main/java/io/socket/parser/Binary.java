@@ -1,14 +1,15 @@
 package io.socket.parser;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import static de.comroid.util.json.JsonSupport.nodeOf;
 
 public class Binary {
 
@@ -35,41 +36,26 @@ public class Binary {
         if (data == null) return null;
 
         if (data instanceof byte[]) {
-            JSONObject placeholder = new JSONObject();
-            try {
-                placeholder.put(KEY_PLACEHOLDER, true);
-                placeholder.put(KEY_NUM, buffers.size());
-            } catch (JSONException e) {
-                logger.log(Level.WARNING, "An error occured while putting data to JSONObject", e);
-                return null;
-            }
+            ObjectNode placeholder = JsonNodeFactory.instance.objectNode();
+            placeholder.put(KEY_PLACEHOLDER, true);
+            placeholder.put(KEY_NUM, buffers.size());
             buffers.add((byte[])data);
             return placeholder;
-        } else if (data instanceof JSONArray) {
-            JSONArray newData = new JSONArray();
-            JSONArray _data = (JSONArray)data;
-            int len = _data.length();
+        } else if (data instanceof ArrayNode) {
+            ArrayNode newData = JsonNodeFactory.instance.arrayNode();
+            ArrayNode _data = (ArrayNode) data;
+            int len = _data.size();
             for (int i = 0; i < len; i ++) {
-                try {
-                    newData.put(i, _deconstructPacket(_data.get(i), buffers));
-                } catch (JSONException e) {
-                    logger.log(Level.WARNING, "An error occured while putting packet data to JSONObject", e);
-                    return null;
-                }
+                newData.set(i, nodeOf(_deconstructPacket(_data.get(i), buffers)));
             }
             return newData;
-        } else if (data instanceof JSONObject) {
-            JSONObject newData = new JSONObject();
-            JSONObject _data = (JSONObject)data;
-            Iterator<?> iterator = _data.keys();
+        } else if (data instanceof ObjectNode) {
+            ObjectNode newData = JsonNodeFactory.instance.objectNode();
+            ObjectNode _data = (ObjectNode) data;
+            Iterator<?> iterator = _data.fieldNames();
             while (iterator.hasNext()) {
                 String key = (String)iterator.next();
-                try {
-                    newData.put(key, _deconstructPacket(_data.get(key), buffers));
-                } catch (JSONException e) {
-                    logger.log(Level.WARNING, "An error occured while putting data to JSONObject", e);
-                    return null;
-                }
+                newData.set(key, nodeOf(_deconstructPacket(_data.get(key), buffers)));
             }
             return newData;
         }
@@ -84,33 +70,23 @@ public class Binary {
     }
 
     private static Object _reconstructPacket(Object data, byte[][] buffers) {
-        if (data instanceof JSONArray) {
-            JSONArray _data = (JSONArray)data;
-            int len = _data.length();
+        if (data instanceof ArrayNode) {
+            ArrayNode _data = (ArrayNode) data;
+            int len = _data.size();
             for (int i = 0; i < len; i ++) {
-                try {
-                    _data.put(i, _reconstructPacket(_data.get(i), buffers));
-                } catch (JSONException e) {
-                    logger.log(Level.WARNING, "An error occured while putting packet data to JSONObject", e);
-                    return null;
-                }
+                _data.set(i, nodeOf(_reconstructPacket(_data.get(i), buffers)));
             }
             return _data;
-        } else if (data instanceof JSONObject) {
-            JSONObject _data = (JSONObject)data;
-            if (_data.optBoolean(KEY_PLACEHOLDER)) {
-                int num = _data.optInt(KEY_NUM, -1);
+        } else if (data instanceof ObjectNode) {
+            ObjectNode _data = (ObjectNode) data;
+            if (_data.get(KEY_PLACEHOLDER).asBoolean(false)) {
+                int num = _data.get(KEY_NUM).asInt(-1);
                 return num >= 0 && num < buffers.length ? buffers[num] : null;
             }
-            Iterator<?> iterator = _data.keys();
+            Iterator<?> iterator = _data.fieldNames();
             while (iterator.hasNext()) {
                 String key = (String)iterator.next();
-                try {
-                    _data.put(key, _reconstructPacket(_data.get(key), buffers));
-                } catch (JSONException e) {
-                    logger.log(Level.WARNING, "An error occured while putting data to JSONObject", e);
-                    return null;
-                }
+                _data.set(key, nodeOf(_reconstructPacket(_data.get(key), buffers)));
             }
             return _data;
         }
